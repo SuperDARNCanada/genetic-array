@@ -9,6 +9,13 @@ from genetic_solver import GeneticSolver
 from plotting import Multiple
 import array_factor
 
+# Colors for pretty printing output
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+
 
 def plot_trials(weights, gains, angles, title, filename, ripple=None, sidelobe=None, transition_width=None, show_ripple=False, show_side_lobes=False, show_transition_width=False, show_phase_wrapping=False, vlines=None):
     """Plot the gain pattern in the horizontal plane and phases of each antenna.
@@ -139,7 +146,11 @@ def plot_trials(weights, gains, angles, title, filename, ripple=None, sidelobe=N
 def main():
     # Helper function to parse comma-separated lists of floats from arguments
     def comma_list(arg):
-        return [float(x) for x in arg.split(',')]
+        try:
+            return [float(x) for x in arg.split(',')]
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{RED}'{arg}' must be comma-separated numbers{RESET}")
+
 
     # Set up argument parser
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -157,10 +168,10 @@ def main():
     parser.add_argument('--num-trials', type=int, help='number of trials for genetic algorithm', default=10)
 
     # Add optional arguments for plotting
-    parser.add_argument('--plot-show-ripple', action="store_true", help='show ripple in gain plots')
-    parser.add_argument('--plot-show-side-lobes', action="store_true", help='show side lobes in gain plots')
-    parser.add_argument('--plot-show-transition-width', action="store_true", help='show transition width in gain plots')
-    parser.add_argument('--plot-show-phase-wrapping', action="store_true", help='show phase wrapping in phase plots')
+    parser.add_argument('-psr','--plot-show-ripple', action="store_true", help='show ripple in gain plots')
+    parser.add_argument('-pss', '--plot-show-side-lobes', action="store_true", help='show side lobes in gain plots')
+    parser.add_argument('-pst', '--plot-show-transition-width', action="store_true", help='show transition width in gain plots')
+    parser.add_argument('-psw', '--plot-show-phase-wrapping', action="store_true", help='show phase wrapping in phase plots')
 
     # Add mandatory arguments
     parser.add_argument('antenna_pattern', type=str, help='.npz file with antenna pattern data')
@@ -243,12 +254,12 @@ def main():
     # population_size = 100
     # num_trials = 100
 
-    print("Ripples: {}".format(ripples))
-    print("Sidelobe Levels: {}".format(sidelobe_levels))
-    print("Transition Widths: {}".format(transition_widths))
-    print("Freqs: {}".format(freqs))
-    print("Population Size: {}".format(population_size))
-    print("Number of Trials: {}".format(num_trials))
+    print("{}Ripples: {}{}".format(GREEN,RESET,ripples))
+    print("{}Sidelobe Levels: {}{}".format(GREEN,RESET,sidelobe_levels))
+    print("{}Transition Widths: {}{}".format(GREEN,RESET,transition_widths))
+    print("{}Freqs: {}{}".format(GREEN,RESET,freqs))
+    print("{}Population Size: {}{}".format(GREEN,RESET,population_size))
+    print("{}Number of Trials: {}{}".format(GREEN,RESET,num_trials))
 
     for freq in freqs:
         print("Frequency: {:.3f} MHz".format(freq * 1e-6))
