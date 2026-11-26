@@ -6,7 +6,7 @@ Example:
     python beam_corrections.py ttfd_12000khz.npz outdir 12000            # falls back to cached_weights()
 
 Inputs
-    pattern    : .npz element pattern from xnec2c_csv_to_npz.py (keys: data, az, el)
+    pattern    : .npz element pattern from reading_xnec2c.py (keys: data, az, el)
     outdir     : directory for plots (created if missing)
     freq_khz   : frequency in kHz, e.g. 12000
     --weights  : results.hdf5 written by batch_genetic_solver.py. The group named after freq_khz is
