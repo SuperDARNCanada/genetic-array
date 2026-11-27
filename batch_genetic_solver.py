@@ -17,7 +17,21 @@ BLUE = "\033[94m"
 RESET = "\033[0m"
 
 
-def plot_trials(weights, gains, angles, title, filename, ripple=None, sidelobe=None, transition_width=None, show_ripple=False, show_side_lobes=False, show_transition_width=False, show_phase_wrapping=False, vlines=None):
+def plot_trials(weights,
+                gains,
+                angles,
+                title,
+                filename,
+                ripple=None,
+                sidelobe=None,
+                transition_width=None,
+                show_ripple=False,
+                show_side_lobes=False,
+                show_transition_width=False,
+                show_phase_wrapping=False,
+                show_polar_plot=False,
+                vlines=None
+    ):
     """Plot the gain pattern in the horizontal plane and phases of each antenna.
 
     Parameters
@@ -110,13 +124,7 @@ def plot_trials(weights, gains, angles, title, filename, ripple=None, sidelobe=N
     ax1.set_xlabel('Azimuth (degrees)')
     ax1.set_ylabel('Gain (dB)')
 
-    # for i in range(len(weights)):
-    #     mask = np.argwhere(np.abs(weights[i]) < 0.01)[:, 0]
-    #     plot_arr = np.ma.masked_where(np.abs(weights[i]) < 0.01, np.unwrap(np.angle(weights[i])))
-    #     line, = ax2.plot(plot_arr, marker='o')
-    #     ax2.scatter(mask, np.zeros(mask.shape), marker='o', fc='white', ec=line.get_color())
-    #     ax2.set_xlim(-0.5, weights.shape[1]-0.5)
-
+    # plot phase and wrap if specified
     for i in range(len(weights)):
         inactive = np.abs(weights[i]) < 0.01
         mask = np.argwhere(inactive)[:, 0]
@@ -125,8 +133,7 @@ def plot_trials(weights, gains, angles, title, filename, ripple=None, sidelobe=N
         else:
             phase = np.unwrap(np.angle(weights[i]))
         plot_arr = np.ma.masked_where(inactive, phase)
-        # Wrapped phases jump between 0 and 2*pi, so draw markers only (no connecting lines)
-        line, = ax2.plot(plot_arr, marker='o', linestyle='-')# linestyle='none' if show_phase_wrapping else '-')
+        line, = ax2.plot(plot_arr, marker='o', linestyle='-')
         ax2.scatter(mask, np.zeros(mask.shape), marker='o', fc='white', ec=line.get_color())
         ax2.set_xlim(-0.5, weights.shape[1]-0.5)
 
@@ -139,8 +146,188 @@ def plot_trials(weights, gains, angles, title, filename, ripple=None, sidelobe=N
 
     ax2.set_xlabel("Antenna Index")
     ax2.set_ylabel("Phase (radians)")
-    plt.savefig(filename, bbox_inches='tight')
-    plt.close()
+    plt.savefig(filename,
+                bbox_inches='tight',
+                dpi=300
+        )
+    plt.close(fig)
+
+    # =========================================================
+    # SEPARATE POLAR GAIN PLOT (NORTHERN 180 DEGREES)
+    # =========================================================
+    if show_polar:
+        # Create a separate figure
+        fig_polar, ax_polar = plt.subplots(
+            figsize=(10, 8),
+            subplot_kw={'projection': 'polar'}
+        )
+
+        # Convert angles to radians
+        angles_rad = np.deg2rad(angles)
+
+        # Determine radial limits
+        pad = 2
+        y_floor = np.floor((np.min(gains) - pad) / 5) * 5
+        y_roof = np.ceil((np.max(gains) + pad) / 5) * 5
+
+        radial_offset = 0#abs(y_floor)
+
+        # Mirror the right-half data onto the left half
+        mirrored_angles = -angles_rad
+
+        # Plot each gain pattern
+        for i in range(len(gains)):
+
+            # Original right-half pattern
+            ax_polar.plot(
+                angles_rad + np.pi/2,
+                gains[i] + radial_offset,
+                #label=f'Array {i + 1}'
+            )
+
+            # Mirrored left-half pattern
+            ax_polar.plot(
+                mirrored_angles + np.pi/2,
+                gains[i] + radial_offset,
+                color=ax_polar.lines[-1].get_color()
+            )
+
+        # Configure polar orientation
+        ax_polar.set_theta_zero_location('E')
+        ax_polar.set_theta_direction(1)
+
+        # Display only the northern 180 degrees
+        ax_polar.set_thetamin(0)
+        ax_polar.set_thetamax(180)
+
+        # Configure radial axis
+        ax_polar.set_ylim(y_floor, y_roof)
+
+        radial_ticks = np.arange(
+            y_roof,
+            y_floor,
+            -20
+        )
+
+        ax_polar.set_yticks(radial_ticks)
+        ax_polar.set_yticklabels([
+            f'{tick:.0f} dB'
+            for tick in radial_ticks
+        ])
+
+        # Configure angular ticks
+        ax_polar.set_thetagrids(
+            np.arange(0, 181, 30)
+        )
+
+        # Add FOV boundaries
+        if vlines is not None:
+            for vline in vlines:
+                ax_polar.plot(
+                    [np.deg2rad(vline) + np.pi/2, np.deg2rad(vline) + np.pi/2],
+                    [y_roof, y_floor],
+                    color='black',
+                    linestyle='--',
+                    linewidth=1
+                )
+
+                # Mirrored FOV boundary
+                ax_polar.plot(
+                    [-np.deg2rad(vline) + np.pi/2, -np.deg2rad(vline) + np.pi/2],
+                    [y_floor, y_roof],
+                    color='black',
+                    linestyle='--',
+                    linewidth=1
+                )
+
+        # Create a shaded region for the ripple if requested
+        if show_ripple and ripple is not None:
+            gain_axis_edges = [np.max(gains), np.max(gains) - ripple]
+            if np.min(angles) == 0:
+                az_axis_edges = [vlines[0] + 90, -vlines[0] + 90]
+            else:
+                az_axis_edges = [vlines[0] + 90, vlines[1] + 90]
+            az_arc = np.linspace(az_axis_edges[0], az_axis_edges[1], 100)
+            ax_polar.fill_between(np.deg2rad(az_arc), gain_axis_edges[0], gain_axis_edges[1], color='green', alpha=0.3, label='Ripple')
+
+        # Create a shaded region for the transition width if requested
+        if show_transition_width and transition_width is not None:
+            az_start = vlines[0] + 90
+            if np.min(angles) == 0:
+                az_end = vlines[0] + transition_width + 90
+                fov_width = 2 * vlines[0]
+            else:
+                ax_end = vlines[1] + transition_width + 90
+                fov_width = vlines[0] - vlines[1]
+
+            # Left/first side
+            ax_polar.axvspan(
+                np.deg2rad(az_start),
+                np.deg2rad(az_end),
+                color='lightgray',
+                alpha=0.3,
+                zorder=0,
+                label='Transition Width'
+            )
+            # Right/mirrored side across 90° (boresight)
+            ax_polar.axvspan(
+                np.deg2rad(az_start - fov_width),
+                np.deg2rad(az_end - fov_width - 2 * transition_width),
+                color='lightgray',
+                alpha=0.3,
+                zorder=0
+            )
+
+        # Create a shaded region for the side lobe if requested
+        # Note side lobe level is max of gain plus the sidelobe level (which is negative)
+        if show_side_lobes and sidelobe is not None:
+            gain_axis_edges = [y_roof, np.max(gains) + sidelobe]
+
+            # Positive/right-side sidelobe arc (from end of transition width to pattern edge)
+            az_start = vlines[0] + transition_width + 90
+            az_end = np.max(angles) + 90
+            az_arc = np.linspace(az_start, az_end, 100)
+
+            ax_polar.fill_between(
+                np.deg2rad(az_arc),
+                gain_axis_edges[0],
+                gain_axis_edges[1],
+                color='blue',
+                alpha=0.3,
+                label='Sidelobe'
+            )
+            # Mirror across 90° boresight (180 - az_arc)
+            ax_polar.fill_between(
+                np.deg2rad(180 - az_arc),
+                gain_axis_edges[0],
+                gain_axis_edges[1],
+                color='blue',
+                alpha=0.3
+            )
+
+
+        # Formatting
+        ax_polar.set_title(
+            f'{title} Polar Plot',
+            pad=25
+        )
+
+        ax_polar.grid(True)
+        ax_polar.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1))
+
+        # Generate output filename
+        import os
+        base, ext = os.path.splitext(filename)
+        polar_filename = f'{base}_polar_plot{ext}'
+
+        # Save separate polar plot
+        plt.savefig(
+            polar_filename,
+            bbox_inches='tight',
+            dpi=300
+        )
+
+        plt.close(fig_polar)
 
 
 def main():
@@ -156,22 +343,26 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Add optional arguments for configuration
+    # Note that SuperDARN Canada has radar FOV of 3.24 beam width times 16 beams = 51.84 deg
+    # that FOV means --left/right-bound defaults to -+25.92
+    # Beam info is found in SuperDARN/hdw/hdw.dat.<SITE_ID> files on github
     parser.add_argument('--resolution', type=float, help='angular resolution in degrees', default=0.5)
     parser.add_argument('--spacing', type=float, help='antenna spacing in meters', default=15.24)
-    parser.add_argument('--left-bound', type=float, help='left bound of FOV in degrees CW from boresight', default=-30.0)
-    parser.add_argument('--right-bound', type=float, help='right bound of FOV in degrees CW from boresight', default=30.0)
+    parser.add_argument('--left-bound', type=float, help='left bound of FOV in degrees CW from boresight', default=-25.92)
+    parser.add_argument('--right-bound', type=float, help='right bound of FOV in degrees CW from boresight', default=25.92)
     parser.add_argument('--antennas-down', type=str, help='antennas not transmitting, format as 0,1,2,14', default='')
     parser.add_argument('--ripple', type=comma_list, help='ripple values in dB, format as 2,3,4', default='2,3,4')
-    parser.add_argument('--side-lobes', type=comma_list, help='side lobe values dB, format as -20,-17,-14', default='-20,-17,-14')
+    parser.add_argument('--side-lobes', type=comma_list, help='side lobe values dB, format as =-20,-17,-14', default='-20,-17,-14')
     parser.add_argument('--transition-width', type=comma_list, help='transition width values in Degrees, format as 3,4,5', default='5.0')
     parser.add_argument('--pop-size', type=int, help='population size for genetic algorithm', default=100)
     parser.add_argument('--num-trials', type=int, help='number of trials for genetic algorithm', default=10)
 
     # Add optional arguments for plotting
-    parser.add_argument('-psr','--plot-show-ripple', action="store_true", help='show ripple in gain plots')
+    parser.add_argument('-psr', '--plot-show-ripple', action="store_true", help='show ripple in gain plots')
     parser.add_argument('-pss', '--plot-show-side-lobes', action="store_true", help='show side lobes in gain plots')
     parser.add_argument('-pst', '--plot-show-transition-width', action="store_true", help='show transition width in gain plots')
     parser.add_argument('-psw', '--plot-show-phase-wrapping', action="store_true", help='show phase wrapping in phase plots')
+    parser.add_argument('-psp', '--plot-show-polar', action="store_true", help='show a polar plot of gain and angle')
 
     # Add mandatory arguments
     parser.add_argument('antenna_pattern', type=str, help='.npz file with antenna pattern data')
@@ -182,6 +373,7 @@ def main():
     assert 0.1 < args.resolution < 2.0, "--resolution invalid"
     assert 2.0 < args.spacing < 20.0, "--spacing invalid"
 
+    # Check if any antennas are down, if so add to reference list
     num_antennas = 16   # main array
     bad_antennas = []
     if args.antennas_down != '':
@@ -190,6 +382,7 @@ def main():
             assert (0 <= val < num_antennas), f"--antennas-down invalid input {args.antennas_down}"
             bad_antennas.append(val)
 
+    # Create FOV bounds
     angular_res = args.resolution  # degrees
     left_bound = args.left_bound  # FOV boundary, in degrees right of boresight
     assert -90 < left_bound < 0, "--left-bound invalid"
@@ -199,6 +392,7 @@ def main():
     antenna_spacing = args.spacing     # meters
     labels = []
 
+    # Check if FOV is symetric (reduces calculation time if so)
     if np.isclose(-left_bound, right_bound) and len(bad_antennas) == 0:
         symmetric = True
     else:
@@ -222,7 +416,7 @@ def main():
         weights.append(w)
         labels.append(label)
 
-    # Common mode frequencies
+    # Common mode frequencies and other args converted from argparse to variables used in main()
     freqs = [x * 1000 for x in args.freqs]  # Hz
 
     if args.ripple is None:
@@ -245,6 +439,11 @@ def main():
         num_trials = 10
     else:
         num_trials = args.num_trials
+
+    # Make sure output directory exists else create it
+    out_dir = os.path.dirname(args.outdir)
+    if out_dir and not os.path.isdir(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
 
     # Riley Testing Parameters
     # freqs = [x * 1000 for x in args.freqs]  # Hz
@@ -322,7 +521,7 @@ def main():
                     # Plot the results for this configuration
                     title = '{:.3f} MHz, {:.1f}dB Ripple, {:.1f}dB Peak Sidelobe, {:.1f} degree Transition Width, {} Antennas' \
                             ''.format(freq * 1e-6, ripple, sidelobe, width, num_antennas)
-                    filename = f'{args.outdir}/Genetic_Solutions_{freq*1e-6:.3f}MHz_{ripple:.1f}ripple_{sidelobe:.1f}sidelobe_{width:.1f}width_{num_antennas}antennas.png'
+                    filename = f'{out_dir}/Genetic_Solutions_{freq*1e-6:.3f}MHz_{ripple:.1f}ripple_{sidelobe:.1f}sidelobe_{width:.1f}width_{num_antennas}antennas.png'
 
                     plot_trials(weights, gains, azimuths, title, filename,
                                 ripple, sidelobe, width,
@@ -330,6 +529,7 @@ def main():
                                 show_side_lobes=args.plot_show_side_lobes,
                                 show_transition_width=args.plot_show_transition_width,
                                 show_phase_wrapping=args.plot_show_phase_wrapping,
+                                show_polar=args.plot_show_polar,
                                 vlines=vlines)
 
         best_weights = np.array(best_weights)
@@ -347,7 +547,7 @@ def main():
         gains = [af[i, 0, :] for i in range(af.shape[0])]
 
         # Save the results to an HDF5 file
-        base = f'{args.outdir}/results_{int(freq/1000):05d}kHz'
+        base = f'{out_dir}/results_{int(freq/1000):05d}kHz'
         outfile = f'{base}.hdf5'
         for version in range(1, 10000): # if you have more than 10,000 versions of the same frequency, you have bigger problems
             if not os.path.exists(outfile):
@@ -367,13 +567,14 @@ def main():
         # Plot the results for this configuration
         title = '{:.3f} MHz'.format(freq * 1e-6)
         filename = '{}/Genetic_Solutions_{:.1f}MHz_{}antennas.png' \
-                   ''.format(args.outdir, freq * 1e-6, num_antennas)
+                   ''.format(out_dir, freq * 1e-6, num_antennas)
         plot_trials(best_weights, gains, azimuths, title, filename,
                                         ripple, sidelobe, width,
                                         show_ripple=args.plot_show_ripple,
                                         show_side_lobes=args.plot_show_side_lobes,
                                         show_transition_width=args.plot_show_transition_width,
                                         show_phase_wrapping=args.plot_show_phase_wrapping,
+                                        show_polar=args.plot_show_polar,
                                         vlines=vlines)
 
 
